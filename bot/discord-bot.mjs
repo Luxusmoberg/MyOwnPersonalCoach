@@ -89,4 +89,11 @@ client.on("messageCreate", async (message) => {
   }
 });
 
+// Tiny HTTP server so it runs as a free Render Web Service
+import { createServer } from "http";
+const PORT = process.env.PORT || 3001;
+createServer((_req, res) => { res.writeHead(200); res.end("ok"); }).listen(PORT, () => {
+  console.log(`🌐 Health check on port ${PORT}`);
+});
+
 client.login(DISCORD_TOKEN);
