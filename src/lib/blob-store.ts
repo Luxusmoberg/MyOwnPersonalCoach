@@ -1,21 +1,10 @@
-import { getStore } from "@netlify/blobs";
 import fs from "fs/promises";
 import path from "path";
 import { getUserId } from "@/lib/auth";
-import { createHash } from "crypto";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = path.join("/tmp", "lucas-coach-data");
 
-function isNetlifyDev() {
-  return !!process.env.NETLIFY_DEV || !!process.env.NETLIFY;
-}
-
-function getBlobStore() {
-  return getStore("lucas-coach");
-}
-
-// File-based fallback for local dev
-async function ensureDataDir(dir: string) {
+async function ensureDir(dir: string) {
   try {
     await fs.mkdir(dir, { recursive: true });
   } catch {
@@ -23,7 +12,7 @@ async function ensureDataDir(dir: string) {
   }
 }
 
-async function fileRead<T>(key: string): Promise<T | null> {
+async function readOne<T>(key: string): Promise<T | null> {
   try {
     const filePath = path.join(DATA_DIR, `${key}.json`);
     const data = await fs.readFile(filePath, "utf-8");
@@ -33,14 +22,13 @@ async function fileRead<T>(key: string): Promise<T | null> {
   }
 }
 
-async function fileWrite<T>(key: string, data: T): Promise<void> {
+async function writeOne<T>(key: string, data: T): Promise<void> {
   const filePath = path.join(DATA_DIR, `${key}.json`);
-  const dir = path.dirname(filePath);
-  await ensureDataDir(dir);
+  await ensureDir(path.dirname(filePath));
   await fs.writeFile(filePath, JSON.stringify(data, null, 2));
 }
 
-async function fileDelete(key: string): Promise<void> {
+async function deleteOne(key: string): Promise<void> {
   try {
     const filePath = path.join(DATA_DIR, `${key}.json`);
     await fs.unlink(filePath);
@@ -49,86 +37,23 @@ async function fileDelete(key: string): Promise<void> {
   }
 }
 
-async function fileList(prefix: string): Promise<string[]> {
+async function readCollection<T>(prefix: string): Promise<T[]> {
   try {
     const dir = path.join(DATA_DIR, prefix);
     const entries = await fs.readdir(dir, { recursive: true });
-    return entries
-      .filter((f) => (f as string).endsWith(".json"))
-      .map((f) => prefix + (f as string).replace(".json", ""));
+    const items: T[] = [];
+    for (const entry of entries) {
+      const key = prefix + (entry as string).replace(".json", "");
+      const item = await readOne<T>(key);
+      if (item) items.push(item);
+    }
+    return items;
   } catch {
     return [];
   }
 }
 
-// Public API — auto-selects Netlify Blobs or local files
-
-async function readOne<T>(key: string): Promise<T | null> {
-  if (isNetlifyDev()) {
-    const store = getBlobStore();
-    try {
-      const raw = await store.get(key);
-      if (!raw) return null;
-      const data = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-      return JSON.parse(data);
-    } catch {
-      return null;
-    }
-  }
-  return fileRead<T>(key);
-}
-
-async function writeOne<T>(key: string, data: T): Promise<void> {
-  if (isNetlifyDev()) {
-    const store = getBlobStore();
-    await store.setJSON(key, data);
-    return;
-  }
-  await fileWrite(key, data);
-}
-
-async function deleteOne(key: string): Promise<void> {
-  if (isNetlifyDev()) {
-    const store = getBlobStore();
-    try {
-      await store.delete(key);
-    } catch {
-      // Key doesn't exist
-    }
-    return;
-  }
-  await fileDelete(key);
-}
-
-async function readCollection<T>(prefix: string): Promise<T[]> {
-  if (isNetlifyDev()) {
-    const store = getBlobStore();
-    try {
-      const { blobs } = await store.list({ prefix });
-      const items: T[] = [];
-      for (const blob of blobs) {
-        const raw = await store.get(blob.key);
-        if (raw) {
-          const data = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-          items.push(JSON.parse(data));
-        }
-      }
-      return items;
-    } catch {
-      return [];
-    }
-  }
-  const keys = await fileList(prefix);
-  const items: T[] = [];
-  for (const key of keys) {
-    const item = await fileRead<T>(key);
-    if (item) items.push(item);
-  }
-  return items;
-}
-
-// === User-scoped helpers ===
-// All user data is namespaced: {userId}/profile, {userId}/goals/{id}, etc.
+// === User-scoped keys ===
 
 async function scopedKey(suffix: string): Promise<string> {
   const userId = await getUserId();
@@ -144,7 +69,7 @@ import type { Conversation } from "@/types/conversation";
 import type { CoachMemory } from "@/types/memory";
 import type { UserAccount } from "@/types/user";
 
-// === User Accounts (global, not user-scoped) ===
+// === User Accounts (global) ===
 
 export async function getUserByUsername(username: string): Promise<UserAccount | null> {
   const users = await readCollection<UserAccount>("accounts/");
@@ -164,7 +89,7 @@ export async function createUserAccount(user: UserAccount): Promise<void> {
   await writeOne(`accounts/${user.id}`, user);
 }
 
-// === User-scoped profile ===
+// === User-scoped ===
 
 export async function getProfile(): Promise<UserProfile | null> {
   const key = await scopedKey("profile");
@@ -175,8 +100,6 @@ export async function setProfile(profile: UserProfile): Promise<void> {
   const key = await scopedKey("profile");
   await writeOne(key, profile);
 }
-
-// === User-scoped app state ===
 
 export async function getAppState(): Promise<AppState> {
   const { DEFAULT_APP_STATE } = await import("@/types/app-state");
@@ -189,8 +112,6 @@ export async function setAppState(state: AppState): Promise<void> {
   const key = await scopedKey("app-state");
   await writeOne(key, state);
 }
-
-// === User-scoped goals ===
 
 export async function getGoals(): Promise<Goal[]> {
   const key = await scopedKey("");
@@ -212,8 +133,6 @@ export async function deleteGoal(id: string): Promise<void> {
   await deleteOne(key);
 }
 
-// === User-scoped checkins ===
-
 export async function getCheckins(): Promise<Checkin[]> {
   const key = await scopedKey("");
   return readCollection<Checkin>(`${key}checkins/`);
@@ -228,8 +147,6 @@ export async function setCheckin(id: string, checkin: Checkin): Promise<void> {
   const key = await scopedKey(`checkins/${id}`);
   await writeOne(key, checkin);
 }
-
-// === User-scoped conversations ===
 
 export async function getConversations(): Promise<Conversation[]> {
   const key = await scopedKey("");
@@ -250,8 +167,6 @@ export async function deleteConversation(id: string): Promise<void> {
   const key = await scopedKey(`conversations/${id}`);
   await deleteOne(key);
 }
-
-// === User-scoped memories ===
 
 export async function getMemories(): Promise<CoachMemory[]> {
   const key = await scopedKey("");

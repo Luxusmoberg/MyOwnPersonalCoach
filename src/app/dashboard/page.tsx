@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Brain,
 } from "lucide-react";
+import { WeatherWidget } from "@/components/dashboard/weather-widget";
 import type { Goal } from "@/types/goal";
 import type { CoachMemory } from "@/types/memory";
 
@@ -79,6 +80,9 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Weather */}
+      <WeatherWidget />
 
       {/* Quick actions */}
       <div className="grid grid-cols-3 gap-4">
