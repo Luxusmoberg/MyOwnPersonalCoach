@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bot": "node bot/discord-bot.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
@@ -14,6 +15,8 @@
     "@netlify/plugin-nextjs": "^5.15.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.4.2",
     "jose": "^6.2.3",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",

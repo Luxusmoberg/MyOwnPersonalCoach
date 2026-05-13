@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmileCPH — Dentist Chatbot</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; min-height: 100vh; display: flex; justify-content: center; }
+  .chat-container { width: 100%; max-width: 440px; height: 100vh; display: flex; flex-direction: column; background: #fff; box-shadow: 0 0 40px rgba(0,0,0,.06); }
+  .header { background: #0f766e; color: #fff; padding: 20px 24px; display: flex; align-items: center; gap: 14px; }
+  .header .logo { width: 44px; height: 44px; background: #fff; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .header h1 { font-size: 17px; font-weight: 600; }
+  .header p { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.5; animation: fadeIn .2s ease; }
+  .msg.user { align-self: flex-end; background: #0f766e; color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px; }
+  .msg .link { color: #0f766e; font-weight: 500; text-decoration: underline; cursor: pointer; margin-top: 6px; display: inline-block; }
+  .input-area { padding: 16px 20px; border-top: 1px solid #e2e8f0; display: flex; gap: 10px; }
+  .input-area input { flex: 1; border: 1px solid #e2e8f0; border-radius: 24px; padding: 12px 18px; font-size: 14px; outline: none; transition: border-color .2s; }
+  .input-area input:focus { border-color: #0f766e; }
+  .input-area button { background: #0f766e; color: #fff; border: none; border-radius: 24px; padding: 12px 22px; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity .2s; }
+  .input-area button:disabled { opacity: .6; cursor: not-allowed; }
+  .input-area button:hover:not(:disabled) { opacity: .9; }
+  .typing { display: flex; gap: 4px; padding: 10px 14px; align-self: flex-start; }
+  .typing span { width: 7px; height: 7px; background: #94a3b8; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+  .typing span:nth-child(1) { animation-delay: -.32s; }
+  .typing span:nth-child(2) { animation-delay: -.16s; }
+  @keyframes bounce { 0%,80%,100% { transform:scale(0) } 40% { transform:scale(1) } }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
+  .services { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 20px 8px; }
+  .services button { background: #f0fdfa; border: 1px solid #ccfbf1; color: #0f766e; padding: 6px 14px; border-radius: 16px; font-size: 12px; cursor: pointer; transition: background .2s; }
+  .services button:hover { background: #ccfbf1; }
+</style>
+</head>
+<body>
+<div class="chat-container">
+  <div class="header">
+    <div class="logo">🦷</div>
+    <div>
+      <h1>SmileCPH Dentist</h1>
+      <p>Copenhagen • Online</p>
+    </div>
+  </div>
+  <div class="messages" id="messages">
+    <div class="msg bot">
+      👋 Hej! Welcome to <b>SmileCPH Dentist Clinic</b> in Copenhagen.<br><br>
+      I can help with:<br>
+      • Teeth cleaning — <b>500 kr</b><br>
+      • Emergency appointments<br>
+      • Opening hours: <b>Mon–Fri 8–18</b><br>
+      • Booking appointments<br><br>
+      How can I help you today?
+    </div>
+  </div>
+  <div class="services" id="services">
+    <button onclick="sendPreset('How much does teeth cleaning cost?')">🪥 Teeth cleaning</button>
+    <button onclick="sendPreset('I have a dental emergency, can I come in?')">🚨 Emergency</button>
+    <button onclick="sendPreset('What are your opening hours?')">🕐 Hours</button>
+    <button onclick="sendPreset('I want to book an appointment')">📅 Book</button>
+  </div>
+  <div class="input-area">
+    <input id="input" type="text" placeholder="Type your message..." onkeydown="if(event.key==='Enter')send()">
+    <button id="sendBtn" onclick="send()">Send</button>
+  </div>
+</div>
+
+<script>
+const DEEPSEEK_KEY = 'sk-4d5467af025b4312b76039b54e36a30e';
+const API_URL = 'https://api.deepseek.com/v1/chat/completions';
+
+const SYSTEM_PROMPT = `You are a friendly assistant for SmileCPH Dentist Clinic in Copenhagen.
+Answer questions about teeth cleaning (500 kr), emergency appointments,
+opening hours (Mon-Fri 8-18), and booking. If asked anything else, kindly
+say you're just a demo bot and redirect back to dental topics.
+Always end every response with: Would you like to book an appointment?
+www.smilecph-demo.dk
+
+Keep responses warm, helpful, and under 4 sentences. Use Danish-style English
+(polite, slightly formal but friendly).`;
+
+const messages = document.getElementById('messages');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const servicesDiv = document.getElementById('services');
+let chatHistory = [];
+let streaming = false;
+
+function addMessage(text, role) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const div = document.createElement('div');
+  div.className = 'typing';
+  div.id = 'typing-indicator';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function hideTyping() {
+  document.getElementById('typing-indicator')?.remove();
+}
+
+async function sendPreset(text) {
+  input.value = text;
+  send();
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text || streaming) return;
+  input.value = '';
+  streaming = true;
+  sendBtn.disabled = true;
+  servicesDiv.style.display = 'none';
+
+  addMessage(text, 'user');
+  chatHistory.push({ role: 'user', content: text });
+  showTyping();
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + DEEPSEEK_KEY },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...chatHistory.slice(-10)],
+        max_tokens: 400,
+        stream: true,
+      }),
+    });
+
+    hideTyping();
+    const botDiv = addMessage('', 'bot');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullResponse = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content;
+          if (delta) { fullResponse += delta; botDiv.textContent = fullResponse; messages.scrollTop = messages.scrollHeight; }
+        } catch {}
+      }
+    }
+
+    chatHistory.push({ role: 'assistant', content: fullResponse });
+  } catch(e) {
+    hideTyping();
+    addMessage('Sorry, something went wrong. Please try again.', 'bot');
+  }
+
+  streaming = false;
+  sendBtn.disabled = false;
+  input.focus();
+}
+</script>
+</body>
+</html>
