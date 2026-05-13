@@ -27,9 +27,9 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLogin = pathname === "/login";
+  const isPublic = pathname === "/login" || pathname === "/register";
 
-  if (isLogin) {
+  if (isPublic) {
     return <>{children}</>;
   }
 

@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { getAppState } from "@/lib/blob-store";
+import { getUserId } from "@/lib/auth";
 
 export default async function HomePage() {
-  const appState = await getAppState();
+  const userId = await getUserId();
 
-  if (!appState.onboardingComplete) {
-    redirect("/onboarding");
+  if (!userId) {
+    redirect("/login");
   }
 
   redirect("/dashboard");

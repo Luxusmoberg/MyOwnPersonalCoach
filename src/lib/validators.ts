@@ -10,14 +10,7 @@ export const milestoneSchema = z.object({
 export const goalSchema = z.object({
   title: z.string().min(1, "Goal title is required"),
   description: z.string().min(1, "Description is required"),
-  category: z.enum([
-    "career",
-    "learning",
-    "health",
-    "finance",
-    "creative",
-    "other",
-  ]),
+  category: z.enum(["career", "learning", "health", "finance", "creative", "other"]),
   priority: z.enum(["high", "medium", "low"]),
   status: z.enum(["not_started", "in_progress", "completed", "paused"]),
   targetDate: z.string().nullable(),
@@ -43,11 +36,7 @@ export const profileSchema = z.object({
   communicationStyle: z.enum(["direct", "gentle", "balanced"]),
   motivationalStyle: z.enum(["challenging", "supportive", "analytical"]),
   verbosity: z.enum(["brief", "detailed"]),
-  accountabilityPreference: z.enum([
-    "gentle_nudge",
-    "direct_confrontation",
-    "data_driven",
-  ]),
+  accountabilityPreference: z.enum(["gentle_nudge", "direct_confrontation", "data_driven"]),
   whatMotivates: z.array(z.string()),
   burnoutSignals: z.array(z.string()),
   bestCheckinTime: z.string(),
@@ -55,7 +44,18 @@ export const profileSchema = z.object({
 });
 
 export const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
+});
+
+export const registerSchema = z.object({
+  username: z
+    .string()
+    .min(2, "Username must be at least 2 characters")
+    .max(30, "Username too long")
+    .regex(/^[a-zA-Z0-9_-]+$/, "Only letters, numbers, dashes, underscores"),
+  email: z.string().email("Valid email is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export const contactSchema = z.object({

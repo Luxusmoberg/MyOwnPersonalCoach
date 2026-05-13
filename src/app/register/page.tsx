@@ -16,12 +16,13 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { register } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,11 +30,11 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const result = await login(username, password);
+    const result = await register(username, email, password);
     if (result.success) {
-      router.push("/dashboard");
+      router.push("/onboarding");
     } else {
-      setError(result.error || "Invalid username or password");
+      setError(result.error || "Registration failed");
     }
 
     setLoading(false);
@@ -46,9 +47,9 @@ export default function LoginPage() {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-3">
             <Brain className="h-6 w-6" />
           </div>
-          <CardTitle>Lucas Coach</CardTitle>
+          <CardTitle>Create your account</CardTitle>
           <CardDescription>
-            Sign in to your personal AI coach
+            Set up your personal AI coach
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -57,7 +58,7 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <Input
                   type="text"
-                  placeholder="Username or email"
+                  placeholder="Username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   autoFocus
@@ -66,8 +67,17 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <Input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Input
                   type="password"
-                  placeholder="Password"
+                  placeholder="Password (min 6 characters)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
@@ -83,16 +93,19 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Signing in...
+                  Creating account...
                 </>
               ) : (
-                "Sign In"
+                "Create Account"
               )}
             </Button>
             <p className="text-sm text-muted-foreground text-center">
-              Don't have an account?{" "}
-              <Link href="/register" className="text-primary hover:underline font-medium">
-                Create one
+              Already have an account?{" "}
+              <Link
+                href="/login"
+                className="text-primary hover:underline font-medium"
+              >
+                Sign in
               </Link>
             </p>
           </CardFooter>

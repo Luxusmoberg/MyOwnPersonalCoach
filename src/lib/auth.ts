@@ -7,13 +7,23 @@ const secret = new TextEncoder().encode(
   process.env.SESSION_SECRET || "dev-secret-change-me-in-production"
 );
 
-export async function createSession(password: string): Promise<string | null> {
-  const accessPassword = process.env.ACCESS_PASSWORD;
-  if (!accessPassword || password !== accessPassword) {
-    return null;
-  }
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
-  const token = await new SignJWT({ authenticated: true })
+async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return (await hashPassword(password)) === hash;
+}
+
+export { hashPassword, verifyPassword };
+
+export async function createSession(userId: string): Promise<string> {
+  const token = await new SignJWT({ userId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
@@ -25,7 +35,7 @@ export async function createSession(password: string): Promise<string | null> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   });
 
   return token;
@@ -36,32 +46,31 @@ export async function clearSession() {
   cookieStore.delete(COOKIE_NAME);
 }
 
-export async function getSession(): Promise<boolean> {
+export async function getUserId(): Promise<string | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
-    if (!token) return false;
-
+    if (!token) return null;
     const { payload } = await jwtVerify(token, secret);
-    return !!payload.authenticated;
+    return (payload.userId as string) || null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-export async function requireAuth(): Promise<boolean> {
-  return getSession();
+export async function requireUserId(): Promise<string> {
+  const userId = await getUserId();
+  if (!userId) throw new Error("Not authenticated");
+  return userId;
 }
 
-// Edge-compatible session check for middleware
-export async function isAuthenticated(request: NextRequest): Promise<boolean> {
+export async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
   try {
     const token = request.cookies.get(COOKIE_NAME)?.value;
-    if (!token) return false;
-
+    if (!token) return null;
     const { payload } = await jwtVerify(token, secret);
-    return !!payload.authenticated;
+    return (payload.userId as string) || null;
   } catch {
-    return false;
+    return null;
   }
 }

@@ -1,6 +1,8 @@
 import { getStore } from "@netlify/blobs";
 import fs from "fs/promises";
 import path from "path";
+import { getUserId } from "@/lib/auth";
+import { createHash } from "crypto";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
@@ -12,17 +14,16 @@ function getBlobStore() {
   return getStore("lucas-coach");
 }
 
-// File-based fallback for local dev without Netlify CLI
-async function ensureDataDir() {
+// File-based fallback for local dev
+async function ensureDataDir(dir: string) {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(dir, { recursive: true });
   } catch {
     // Already exists
   }
 }
 
 async function fileRead<T>(key: string): Promise<T | null> {
-  await ensureDataDir();
   try {
     const filePath = path.join(DATA_DIR, `${key}.json`);
     const data = await fs.readFile(filePath, "utf-8");
@@ -33,10 +34,9 @@ async function fileRead<T>(key: string): Promise<T | null> {
 }
 
 async function fileWrite<T>(key: string, data: T): Promise<void> {
-  await ensureDataDir();
   const filePath = path.join(DATA_DIR, `${key}.json`);
   const dir = path.dirname(filePath);
-  await fs.mkdir(dir, { recursive: true });
+  await ensureDataDir(dir);
   await fs.writeFile(filePath, JSON.stringify(data, null, 2));
 }
 
@@ -50,11 +50,10 @@ async function fileDelete(key: string): Promise<void> {
 }
 
 async function fileList(prefix: string): Promise<string[]> {
-  await ensureDataDir();
   try {
     const dir = path.join(DATA_DIR, prefix);
-    const files = await fs.readdir(dir, { recursive: true });
-    return files
+    const entries = await fs.readdir(dir, { recursive: true });
+    return entries
       .filter((f) => (f as string).endsWith(".json"))
       .map((f) => prefix + (f as string).replace(".json", ""));
   } catch {
@@ -128,7 +127,14 @@ async function readCollection<T>(prefix: string): Promise<T[]> {
   return items;
 }
 
-// Typed collection helpers
+// === User-scoped helpers ===
+// All user data is namespaced: {userId}/profile, {userId}/goals/{id}, etc.
+
+async function scopedKey(suffix: string): Promise<string> {
+  const userId = await getUserId();
+  if (!userId) throw new Error("Not authenticated");
+  return `users/${userId}/${suffix}`;
+}
 
 import type { UserProfile } from "@/types/user";
 import type { AppState } from "@/types/app-state";
@@ -136,81 +142,133 @@ import type { Goal } from "@/types/goal";
 import type { Checkin } from "@/types/checkin";
 import type { Conversation } from "@/types/conversation";
 import type { CoachMemory } from "@/types/memory";
+import type { UserAccount } from "@/types/user";
 
-export async function getProfile() {
-  return readOne<UserProfile>("profile");
+// === User Accounts (global, not user-scoped) ===
+
+export async function getUserByUsername(username: string): Promise<UserAccount | null> {
+  const users = await readCollection<UserAccount>("accounts/");
+  return users.find((u) => u.username === username) || null;
 }
 
-export async function setProfile(profile: UserProfile) {
-  await writeOne("profile", profile);
+export async function getUserByEmail(email: string): Promise<UserAccount | null> {
+  const users = await readCollection<UserAccount>("accounts/");
+  return users.find((u) => u.email === email) || null;
 }
 
-export async function getAppState() {
+export async function getUserById(id: string): Promise<UserAccount | null> {
+  return readOne<UserAccount>(`accounts/${id}`);
+}
+
+export async function createUserAccount(user: UserAccount): Promise<void> {
+  await writeOne(`accounts/${user.id}`, user);
+}
+
+// === User-scoped profile ===
+
+export async function getProfile(): Promise<UserProfile | null> {
+  const key = await scopedKey("profile");
+  return readOne<UserProfile>(key);
+}
+
+export async function setProfile(profile: UserProfile): Promise<void> {
+  const key = await scopedKey("profile");
+  await writeOne(key, profile);
+}
+
+// === User-scoped app state ===
+
+export async function getAppState(): Promise<AppState> {
   const { DEFAULT_APP_STATE } = await import("@/types/app-state");
-  const state = await readOne<AppState>("app-state");
-  return state ?? DEFAULT_APP_STATE;
+  const key = await scopedKey("app-state");
+  const state = await readOne<AppState>(key);
+  return state ?? { ...DEFAULT_APP_STATE };
 }
 
-export async function setAppState(state: AppState) {
-  await writeOne("app-state", state);
+export async function setAppState(state: AppState): Promise<void> {
+  const key = await scopedKey("app-state");
+  await writeOne(key, state);
 }
+
+// === User-scoped goals ===
 
 export async function getGoals(): Promise<Goal[]> {
-  return readCollection<Goal>("goals/");
+  const key = await scopedKey("");
+  return readCollection<Goal>(`${key}goals/`);
 }
 
-export async function getGoal(id: string) {
-  return readOne<Goal>(`goals/${id}`);
+export async function getGoal(id: string): Promise<Goal | null> {
+  const key = await scopedKey(`goals/${id}`);
+  return readOne<Goal>(key);
 }
 
-export async function setGoal(id: string, goal: Goal) {
-  await writeOne(`goals/${id}`, goal);
+export async function setGoal(id: string, goal: Goal): Promise<void> {
+  const key = await scopedKey(`goals/${id}`);
+  await writeOne(key, goal);
 }
 
-export async function deleteGoal(id: string) {
-  await deleteOne(`goals/${id}`);
+export async function deleteGoal(id: string): Promise<void> {
+  const key = await scopedKey(`goals/${id}`);
+  await deleteOne(key);
 }
+
+// === User-scoped checkins ===
 
 export async function getCheckins(): Promise<Checkin[]> {
-  return readCollection<Checkin>("checkins/");
+  const key = await scopedKey("");
+  return readCollection<Checkin>(`${key}checkins/`);
 }
 
-export async function getCheckin(id: string) {
-  return readOne<Checkin>(`checkins/${id}`);
+export async function getCheckin(id: string): Promise<Checkin | null> {
+  const key = await scopedKey(`checkins/${id}`);
+  return readOne<Checkin>(key);
 }
 
-export async function setCheckin(id: string, checkin: Checkin) {
-  await writeOne(`checkins/${id}`, checkin);
+export async function setCheckin(id: string, checkin: Checkin): Promise<void> {
+  const key = await scopedKey(`checkins/${id}`);
+  await writeOne(key, checkin);
 }
+
+// === User-scoped conversations ===
 
 export async function getConversations(): Promise<Conversation[]> {
-  return readCollection<Conversation>("conversations/");
+  const key = await scopedKey("");
+  return readCollection<Conversation>(`${key}conversations/`);
 }
 
-export async function getConversation(id: string) {
-  return readOne<Conversation>(`conversations/${id}`);
+export async function getConversation(id: string): Promise<Conversation | null> {
+  const key = await scopedKey(`conversations/${id}`);
+  return readOne<Conversation>(key);
 }
 
-export async function setConversation(id: string, conversation: Conversation) {
-  await writeOne(`conversations/${id}`, conversation);
+export async function setConversation(id: string, conversation: Conversation): Promise<void> {
+  const key = await scopedKey(`conversations/${id}`);
+  await writeOne(key, conversation);
 }
 
-export async function deleteConversation(id: string) {
-  await deleteOne(`conversations/${id}`);
+export async function deleteConversation(id: string): Promise<void> {
+  const key = await scopedKey(`conversations/${id}`);
+  await deleteOne(key);
 }
+
+// === User-scoped memories ===
 
 export async function getMemories(): Promise<CoachMemory[]> {
-  return readCollection<CoachMemory>("memories/");
+  const key = await scopedKey("");
+  return readCollection<CoachMemory>(`${key}memories/`);
 }
 
-export async function getMemory(id: string) {
-  return readOne<CoachMemory>(`memories/${id}`);
+export async function getMemory(id: string): Promise<CoachMemory | null> {
+  const key = await scopedKey(`memories/${id}`);
+  return readOne<CoachMemory>(key);
 }
 
-export async function setMemory(id: string, memory: CoachMemory) {
-  await writeOne(`memories/${id}`, memory);
+export async function setMemory(id: string, memory: CoachMemory): Promise<void> {
+  const key = await scopedKey(`memories/${id}`);
+  await writeOne(key, memory);
 }
 
-export async function deleteMemory(id: string) {
-  await deleteOne(`memories/${id}`);
+export async function deleteMemory(id: string): Promise<void> {
+  const key = await scopedKey(`memories/${id}`);
+  await deleteOne(key);
 }

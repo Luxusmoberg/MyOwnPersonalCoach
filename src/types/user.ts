@@ -25,3 +25,11 @@ export const DEFAULT_PROFILE: Partial<UserProfile> = {
   bestCheckinTime: "evening",
   goals: "",
 };
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+}

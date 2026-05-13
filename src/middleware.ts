@@ -1,22 +1,24 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isAuthenticated } from "@/lib/auth";
+import { getUserIdFromRequest } from "@/lib/auth";
 
-const publicPaths = ["/login", "/api/auth/login"];
+const publicPaths = ["/login", "/register", "/api/auth/login", "/api/auth/register"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
-    const authed = await isAuthenticated(request);
-    if (authed && pathname === "/login") {
+  const isPublic = publicPaths.some((p) => pathname.startsWith(p));
+
+  const userId = await getUserIdFromRequest(request);
+
+  if (isPublic) {
+    if (userId && (pathname === "/login" || pathname === "/register")) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();
   }
 
-  const authed = await isAuthenticated(request);
-  if (!authed) {
+  if (!userId) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
