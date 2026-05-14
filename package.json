@@ -17,6 +17,7 @@
     "clsx": "^2.1.1",
     "discord.js": "^14.26.4",
     "dotenv": "^17.4.2",
+    "framer-motion": "^12.38.0",
     "jose": "^6.2.3",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",
