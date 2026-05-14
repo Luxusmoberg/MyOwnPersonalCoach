@@ -1,4 +1,4 @@
-# Lucas Coach
+# Coach
 
 A personal AI coach that knows you — your goals, your patterns, your burnout signals — and helps you stay on track. Not a generic motivational bot. A private, persistent coach that learns from every conversation and check-in.
 
